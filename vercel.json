@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "installCommand": "cd artifacts/baqaa-pos && npm install",
-  "buildCommand": "cd artifacts/baqaa-pos && npm run vercel-build",
+  "installCommand": "npm install",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "artifacts/baqaa-pos/dist",
   "cleanUrls": true,
   "trailingSlash": false,
