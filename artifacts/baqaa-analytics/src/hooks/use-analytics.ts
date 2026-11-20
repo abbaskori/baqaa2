@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { subDays } from 'date-fns';
 import { NotificationService } from '../lib/notifications';
+import { supabase } from '../lib/supabase';
 
 export interface Order {
   id: string;
@@ -98,57 +99,130 @@ export function useAnalytics() {
       setLoading(true);
       setError(null);
       
-      const localOrdersRaw = localStorage.getItem('baqaa_orders');
-      const localCustomersRaw = localStorage.getItem('baqaa_customers');
-      
-      let parsedOrders: Order[] = [];
-      let parsedCustomers: Customer[] = [];
-      
-      if (localOrdersRaw) {
-        try {
-          const raw = JSON.parse(localOrdersRaw);
-          parsedOrders = raw.map((o: any) => ({
+      let fetchedOrders: Order[] = [];
+      let fetchedCustomers: Customer[] = [];
+
+      // Fetch all orders directly from Supabase in 1,000 row chunks to bypass PostgREST limits
+      const CHUNK_SIZE = 1000;
+      let offset = 0;
+      let totalCount = 0;
+
+      while (true) {
+        const { data, count, error: sbErr } = await supabase
+          .from('orders')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(offset, offset + CHUNK_SIZE - 1);
+
+        if (sbErr) {
+          console.warn('Supabase fetch failed in useAnalytics:', sbErr);
+          break;
+        }
+
+        if (count !== null && count !== undefined) totalCount = count;
+        const rows = data || [];
+        
+        const mappedRows: Order[] = rows.map((o: any) => {
+          let items: any[] = [];
+          if (Array.isArray(o.items)) items = o.items;
+          else if (typeof o.items === 'string') {
+            try { items = JSON.parse(o.items); } catch { items = []; }
+          }
+
+          return {
             id: o.id,
-            bill_number: o.billNumber ?? o.bill_number,
-            items: o.items,
-            subtotal: o.subtotal,
-            discount_type: o.discountType ?? o.discount_type,
-            discount_value: o.discountValue ?? o.discount_value,
-            discount_amount: o.discountAmount ?? o.discount_amount,
-            total: o.total,
-            payment_method: o.paymentMethod ?? o.payment_method,
-            customer_name: o.customerName ?? o.customer_name,
-            customer_phone: o.customerPhone ?? o.customer_phone,
-            created_at: o.createdAt ?? o.created_at,
-          }));
-        } catch (e) {
-          console.error("Failed to parse local orders", e);
+            bill_number: Number(o.bill_number ?? o.billNumber ?? 0),
+            items,
+            subtotal: Number(o.subtotal ?? 0),
+            discount_type: String(o.discount_type ?? o.discountType ?? 'none'),
+            discount_value: Number(o.discount_value ?? o.discountValue ?? 0),
+            discount_amount: Number(o.discount_amount ?? o.discountAmount ?? 0),
+            total: Number(o.total ?? 0),
+            payment_method: String(o.payment_method ?? o.paymentMethod ?? 'Cash'),
+            customer_name: String(o.customer_name ?? o.customerName ?? ''),
+            customer_phone: String(o.customer_phone ?? o.customerPhone ?? ''),
+            created_at: String(o.created_at ?? o.createdAt ?? new Date().toISOString()),
+          };
+        });
+
+        fetchedOrders = fetchedOrders.concat(mappedRows);
+        if (rows.length < CHUNK_SIZE || fetchedOrders.length >= totalCount) {
+          break;
         }
-      }
-      
-      if (localCustomersRaw) {
-        try {
-          const raw = JSON.parse(localCustomersRaw);
-          parsedCustomers = raw.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            phone: c.phone,
-            created_at: c.createdAt ?? c.created_at,
-            last_order_date: c.lastOrderDate ?? c.last_order_date,
-          }));
-        } catch (e) {
-          console.error("Failed to parse local customers", e);
-        }
-      }
-      
-      if (parsedOrders.length === 0) {
-        const { mockOrders, mockCustomers } = generateMockData();
-        parsedOrders = mockOrders;
-        parsedCustomers = mockCustomers;
+        offset += CHUNK_SIZE;
       }
 
-      setOrders(parsedOrders);
-      setCustomers(parsedCustomers);
+      // If Supabase returned orders, compute unique customers from orders
+      if (fetchedOrders.length > 0) {
+        const customerMap: Record<string, Customer> = {};
+        fetchedOrders.forEach(o => {
+          const key = o.customer_phone || o.customer_name;
+          if (key) {
+            if (!customerMap[key]) {
+              customerMap[key] = {
+                id: key,
+                name: o.customer_name || 'Customer',
+                phone: o.customer_phone || '',
+                created_at: o.created_at,
+                last_order_date: o.created_at,
+              };
+            } else {
+              customerMap[key].last_order_date = o.created_at;
+            }
+          }
+        });
+        fetchedCustomers = Object.values(customerMap);
+      } else {
+        // Fallback to local storage if Supabase failed or returned empty
+        const localOrdersRaw = localStorage.getItem('baqaa_orders');
+        const localCustomersRaw = localStorage.getItem('baqaa_customers');
+        
+        if (localOrdersRaw) {
+          try {
+            const raw = JSON.parse(localOrdersRaw);
+            fetchedOrders = raw.map((o: any) => ({
+              id: o.id,
+              bill_number: o.billNumber ?? o.bill_number,
+              items: o.items,
+              subtotal: o.subtotal,
+              discount_type: o.discountType ?? o.discount_type,
+              discount_value: o.discountValue ?? o.discount_value,
+              discount_amount: o.discountAmount ?? o.discount_amount,
+              total: o.total,
+              payment_method: o.paymentMethod ?? o.payment_method,
+              customer_name: o.customerName ?? o.customer_name,
+              customer_phone: o.customerPhone ?? o.customer_phone,
+              created_at: o.createdAt ?? o.created_at,
+            }));
+          } catch (e) {
+            console.error("Failed to parse local orders", e);
+          }
+        }
+        
+        if (localCustomersRaw) {
+          try {
+            const raw = JSON.parse(localCustomersRaw);
+            fetchedCustomers = raw.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              phone: c.phone,
+              created_at: c.createdAt ?? c.created_at,
+              last_order_date: c.lastOrderDate ?? c.last_order_date,
+            }));
+          } catch (e) {
+            console.error("Failed to parse local customers", e);
+          }
+        }
+        
+        if (fetchedOrders.length === 0) {
+          const { mockOrders, mockCustomers } = generateMockData();
+          fetchedOrders = mockOrders;
+          fetchedCustomers = mockCustomers;
+        }
+      }
+
+      setOrders(fetchedOrders);
+      setCustomers(fetchedCustomers);
     } catch (err: any) {
       console.error('Analytics load failed:', err);
       setError(err.message || 'Unknown error');
@@ -164,7 +238,6 @@ export function useAnalytics() {
     NotificationService.requestPermissions();
 
     const handleStorageUpdate = (e: any) => {
-      // Refresh when localStorage changes in another tab or in this tab
       if (!e.key || e.key === 'baqaa_orders' || e.key === 'baqaa_customers') {
         fetchData();
       }
@@ -181,4 +254,5 @@ export function useAnalytics() {
 
   return { orders, customers, loading, error, refresh: fetchData };
 }
+
 
