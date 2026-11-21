@@ -102,8 +102,6 @@ export default function POS() {
   useEffect(() => { localStorage.setItem(LS_TABS, JSON.stringify(tabs)); }, [tabs]);
   useEffect(() => { localStorage.setItem(LS_ACTIVE, activeTabId); }, [activeTabId]);
 
-  const logoSrc = shop.logo || `${import.meta.env.BASE_URL}baqaa-logo.png`;
-
   // ── Active tab helpers ──────────────────────────────────────────────────────
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
@@ -111,6 +109,18 @@ export default function POS() {
   const updateTab = (updates: Partial<BillTab>) => {
     setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, ...updates } : t)));
   };
+
+  const logoSrc = shop.logo || `${import.meta.env.BASE_URL}baqaa-logo.png`;
+
+  // ── Auto-reset active category if it no longer exists in Supabase ──────────
+  useEffect(() => {
+    if (categories && categories.length > 0 && activeTab && activeTab.activeCategory !== "All") {
+      const exists = categories.some((c) => c.id === activeTab.activeCategory);
+      if (!exists) {
+        updateTab({ activeCategory: "All" });
+      }
+    }
+  }, [categories, activeTab?.activeCategory]);
 
   // ── Tab management ──────────────────────────────────────────────────────────
 
@@ -177,6 +187,8 @@ export default function POS() {
     }
 
     const getCatIndex = (catId: string) => {
+      const idx = categories.findIndex((c: any) => c.id === catId);
+      if (idx !== -1) return idx;
       const cat = categories.find((c: any) => c.id === catId);
       if (!cat) return 999;
       return getCategoryRank(cat.name);

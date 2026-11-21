@@ -57,29 +57,67 @@ function useCloudData<T>(
 // ─────────────────────────────────────────────
 // Category rank for display ordering
 // ─────────────────────────────────────────────
+const PREFERRED_CATEGORY_ORDER = [
+  'Starter',
+  'Burger (Non-Veg)',
+  'Burger (Veg)',
+  'Wrap (Non-Veg)',
+  'Wrap (Veg)',
+  'Fries',
+  'Sizzlers',
+  'Club Sandwich (Non-Veg)',
+  'Club Sandwich (Veg)',
+  'Pizza (Veg)',
+  'Pizza (Non-Veg)',
+  'Salad',
+  'Mocktails & Beverages',
+  'Dessert',
+  'Meal (Non-Veg)',
+  'Meal (Veg)',
+  'Combo',
+  'Add-On',
+];
+
 export function getCategoryRank(rawName: string): number {
+  if (!rawName) return 999;
+  const idx = PREFERRED_CATEGORY_ORDER.findIndex(
+    c => c.toLowerCase() === rawName.toLowerCase()
+  );
+  if (idx !== -1) return idx + 1;
+
+  // Fuzzy match fallback
   const name = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (name.includes('starter')) return 1;
-  if (name.includes('burger')) return 2;
-  if (name.includes('frie') || name.includes('fry')) return 3;
-  if (name.includes('wrap')) return 4;
-  if (name.includes('sizzler')) return 5;
-  if (name.includes('beverage') || name.includes('mocktail')) return 6;
-  if (name.includes('nonveg') && name.includes('pizza')) return 8;
-  if (name.includes('vegpizza') || (name.includes('veg') && name.includes('pizza'))) return 7;
-  if (name.includes('pizza')) return 8;
-  if (name.includes('nonveg') && (name.includes('sandwich') || name.includes('club'))) return 10;
-  if (name.includes('vegsandwich') || name.includes('vegclub') || (name.includes('veg') && (name.includes('sandwich') || name.includes('club')))) return 9;
-  if (name.includes('sandwich') || name.includes('club')) return 10;
-  if (name.includes('combo')) return 11;
-  if (name.includes('addon') || name.includes('add')) return 12;
-  if (name.includes('colddrink') || name.includes('drink')) return 13;
+  if (name.includes('burgernon') || (name.includes('burger') && name.includes('non'))) return 2;
+  if (name.includes('burgerveg') || (name.includes('burger') && name.includes('veg'))) return 3;
+  if (name.includes('burger')) return 3;
+  if (name.includes('wrapnon') || (name.includes('wrap') && name.includes('non'))) return 4;
+  if (name.includes('wrapveg') || (name.includes('wrap') && name.includes('veg'))) return 5;
+  if (name.includes('wrap')) return 5;
+  if (name.includes('frie') || name.includes('fry')) return 6;
+  if (name.includes('sizzler')) return 7;
+  if (name.includes('sandwichnon') || (name.includes('sandwich') && name.includes('non'))) return 8;
+  if (name.includes('sandwichveg') || (name.includes('sandwich') && name.includes('veg'))) return 9;
+  if (name.includes('pizzaveg') || (name.includes('pizza') && name.includes('veg'))) return 10;
+  if (name.includes('pizzanon') || (name.includes('pizza') && name.includes('non'))) return 11;
+  if (name.includes('salad')) return 12;
+  if (name.includes('beverage') || name.includes('mocktail') || name.includes('drink') || name.includes('coffee')) return 13;
+  if (name.includes('dessert') || name.includes('cookie')) return 14;
+  if (name.includes('mealnon') || (name.includes('meal') && name.includes('non'))) return 15;
+  if (name.includes('mealveg') || (name.includes('meal') && name.includes('veg'))) return 16;
+  if (name.includes('combo')) return 17;
+  if (name.includes('addon') || name.includes('add') || name.includes('dip')) return 18;
   return 999;
 }
 
-export function sortCategories<T extends { name: string }>(categories: T[]): T[] {
+export function sortCategories<T extends { id?: string; name: string }>(categories: T[]): T[] {
   if (!categories) return [];
-  return [...categories].sort((a, b) => getCategoryRank(a.name) - getCategoryRank(b.name));
+  return [...categories].sort((a, b) => {
+    if (a.id && b.id && a.id.startsWith('cat_') && b.id.startsWith('cat_')) {
+      return a.id.localeCompare(b.id);
+    }
+    return getCategoryRank(a.name) - getCategoryRank(b.name);
+  });
 }
 
 // ─────────────────────────────────────────────

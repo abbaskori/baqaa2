@@ -56,10 +56,48 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all font-medium text-gray-800";
 
+function compressImage(file: File, maxDim = 400): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = document.createElement("img");
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+}
+
 function ShopInfoTab() {
   const { data: shop, update } = useShopInfo();
   const [form, setForm] = useState(shop);
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ orders: number; customers: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,19 +108,31 @@ function ShopInfoTab() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await update(form);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setIsSaving(true);
+    try {
+      await update(form);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: any) {
+      alert("Failed to save shop info to Supabase: " + (err.message || 'Unknown error'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setForm({ ...form, logo: ev.target?.result as string });
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file, 400);
+      setForm({ ...form, logo: compressed });
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setForm({ ...form, logo: ev.target?.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const clearLogo = () => {
@@ -143,9 +193,10 @@ function ShopInfoTab() {
 
       <button
         type="submit"
-        className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-700 active:scale-95 transition-all shadow-sm"
+        disabled={isSaving}
+        className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-700 active:scale-95 transition-all shadow-sm disabled:opacity-60"
       >
-        {saved ? <><Check className="w-4 h-4 text-green-400" /> Saved!</> : "Save Settings"}
+        {isSaving ? "Saving to Cloud..." : saved ? <><Check className="w-4 h-4 text-green-400" /> Saved!</> : "Save Settings"}
       </button>
 
       {/* Cloud Sync */}
@@ -237,18 +288,39 @@ function ShopInfoTab() {
 function CategoriesTab() {
   const { data: categories, addCategory, deleteCategory } = useCategories();
   const [newName, setNewName] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newName.trim()) { addCategory(newName.trim()); setNewName(""); }
+    if (newName.trim()) {
+      setIsAdding(true);
+      try {
+        await addCategory(newName.trim());
+        setNewName("");
+      } catch (err: any) {
+        alert("Failed to add category to Supabase: " + (err.message || 'Unknown error'));
+      } finally {
+        setIsAdding(false);
+      }
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Delete this category? Items in this category will become unassigned.")) {
+      try {
+        await deleteCategory(id);
+      } catch (err: any) {
+        alert("Failed to delete category: " + (err.message || 'Unknown error'));
+      }
+    }
   };
 
   return (
     <div className="max-w-2xl">
       <form onSubmit={handleAdd} className="flex gap-2 mb-6">
         <input required type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New category name..." className={`${inputCls} flex-1`} />
-        <button type="submit" className="px-5 py-2.5 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 active:scale-95 transition-all flex items-center gap-1.5 text-sm shadow-sm">
-          <Plus className="w-4 h-4" /> Add
+        <button type="submit" disabled={isAdding} className="px-5 py-2.5 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 active:scale-95 transition-all flex items-center gap-1.5 text-sm shadow-sm disabled:opacity-60">
+          <Plus className="w-4 h-4" /> {isAdding ? "Adding..." : "Add"}
         </button>
       </form>
 
@@ -257,7 +329,7 @@ function CategoriesTab() {
           <div key={c.id} className="flex items-center justify-between px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 group">
             <span className="font-semibold text-gray-800 text-sm">{c.name}</span>
             <button
-              onClick={() => window.confirm("Delete this category?") && deleteCategory(c.id)}
+              onClick={() => handleDelete(c.id)}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
             >
               <Trash2 className="w-4 h-4" />
@@ -275,21 +347,44 @@ function MenuItemsTab() {
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", price: "", categoryId: "", image: "🍔" });
   const [filterCat, setFilterCat] = useState("All");
+  const [isSaving, setIsSaving] = useState(false);
 
   const startEdit = (item: any) => {
     setIsEditing(item.id);
     setForm({ name: item.name, price: item.price.toString(), categoryId: item.categoryId, image: item.image });
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = { name: form.name.trim(), price: parseFloat(form.price), categoryId: form.categoryId, image: form.image };
-    if (isEditing === "new") addItem(payload);
-    else if (isEditing) updateItem(isEditing, payload);
-    setIsEditing(null);
+    setIsSaving(true);
+    try {
+      if (isEditing === "new") {
+        await addItem(payload);
+      } else if (isEditing) {
+        await updateItem(isEditing, payload);
+      }
+      setIsEditing(null);
+    } catch (err: any) {
+      alert("Failed to save menu item to Supabase: " + (err.message || 'Unknown error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Delete this item?")) {
+      try {
+        await deleteItem(id);
+      } catch (err: any) {
+        alert("Failed to delete item: " + (err.message || 'Unknown error'));
+      }
+    }
   };
 
   const getCatIndex = (catId: string) => {
+    const idx = categories.findIndex((c: any) => c.id === catId);
+    if (idx !== -1) return idx;
     const cat = categories.find((c: any) => c.id === catId);
     if (!cat) return 999;
     return getCategoryRank(cat.name);
@@ -335,7 +430,9 @@ function MenuItemsTab() {
         </Field>
 
         <div className="flex gap-3 pt-2">
-          <button type="submit" className="flex-1 py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-sm text-sm">Save Item</button>
+          <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-sm text-sm disabled:opacity-60">
+            {isSaving ? "Saving to Cloud..." : "Save Item"}
+          </button>
           <button type="button" onClick={() => setIsEditing(null)} className="py-3 px-6 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-sm">Cancel</button>
         </div>
       </form>
@@ -370,7 +467,7 @@ function MenuItemsTab() {
               <button onClick={() => startEdit(item)} className="w-7 h-7 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded-lg text-gray-700 transition-colors">
                 <Edit2 className="w-3.5 h-3.5" />
               </button>
-              <button onClick={() => window.confirm("Delete this item?") && deleteItem(item.id)} className="w-7 h-7 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors">
+              <button onClick={() => handleDelete(item.id)} className="w-7 h-7 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>

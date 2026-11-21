@@ -207,12 +207,18 @@ export const StorageAPI = {
 
   // ── CATEGORIES ─────────────────────────────
   getCategories: async (): Promise<Category[]> => {
-    const { data } = await supabase.from('categories').select('*').order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('categories').select('*').order('id', { ascending: true });
+    if (error) {
+      console.error('Supabase getCategories error:', error);
+      return [];
+    }
     return (data || []).map(dbToCat);
   },
 
   addCategory: async (name: string): Promise<Category> => {
-    const id = uuidv4();
+    const { data: existing } = await supabase.from('categories').select('id');
+    const nextNum = (existing?.length || 0) + 1;
+    const id = `cat_${String(nextNum).padStart(3, '0')}`;
     const now = new Date().toISOString();
     const { data, error } = await supabase.from('categories').insert({ id, name, created_at: now }).select().single();
     if (error) throw error;
@@ -221,18 +227,25 @@ export const StorageAPI = {
   },
 
   deleteCategory: async (id: string): Promise<void> => {
-    await supabase.from('categories').delete().eq('id', id);
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) throw error;
     emitChange();
   },
 
   // ── MENU ITEMS ─────────────────────────────
   getMenuItems: async (): Promise<MenuItem[]> => {
-    const { data } = await supabase.from('menu_items').select('*').order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('menu_items').select('*').order('id', { ascending: true });
+    if (error) {
+      console.error('Supabase getMenuItems error:', error);
+      return [];
+    }
     return (data || []).map(dbToItem);
   },
 
   addMenuItem: async (item: Omit<MenuItem, 'id' | 'createdAt'>): Promise<MenuItem> => {
-    const id = uuidv4();
+    const { data: existing } = await supabase.from('menu_items').select('id');
+    const nextNum = (existing?.length || 0) + 1;
+    const id = `item_${String(nextNum).padStart(3, '0')}`;
     const now = new Date().toISOString();
     const { data, error } = await supabase.from('menu_items').insert({
       id, name: item.name, price: item.price,
@@ -249,12 +262,14 @@ export const StorageAPI = {
     if (updates.price !== undefined) payload.price = updates.price;
     if (updates.categoryId !== undefined) payload.category_id = updates.categoryId;
     if (updates.image !== undefined) payload.image = updates.image;
-    await supabase.from('menu_items').update(payload).eq('id', id);
+    const { error } = await supabase.from('menu_items').update(payload).eq('id', id);
+    if (error) throw error;
     emitChange();
   },
 
   deleteMenuItem: async (id: string): Promise<void> => {
-    await supabase.from('menu_items').delete().eq('id', id);
+    const { error } = await supabase.from('menu_items').delete().eq('id', id);
+    if (error) throw error;
     emitChange();
   },
 
