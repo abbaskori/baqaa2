@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useShopInfo, useCategories, useMenuItems, useSecuritySettings, getCategoryRank } from "@/hooks/use-data";
 import { StorageAPI } from "@/lib/storage";
 import { Plus, Trash2, Edit2, Check, X, Store, Tag, Pizza, Upload, Image, Shield, Key, Eye, EyeOff, Cloud, CloudUpload, AlertCircle } from "lucide-react";
@@ -63,6 +63,10 @@ function ShopInfoTab() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ orders: number; customers: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setForm(shop);
+  }, [shop]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -378,20 +382,32 @@ function MenuItemsTab() {
 }
 
 function SecurityTab() {
-  const { data: security, update } = useSecuritySettings();
+  const { data: security, update, loading } = useSecuritySettings();
   const [form, setForm] = useState(security);
   const [showPins, setShowPins] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    setForm(security);
+  }, [security]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.adminPin.length !== 4 || form.staffPin.length !== 4) {
+    if (form.adminPin.length !== 4 || form.staffPin.length !== 4 || (form.managerPin && form.managerPin.length !== 4)) {
       alert("PINs must be exactly 4 digits.");
       return;
     }
-    await update(form);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setIsUpdating(true);
+    try {
+      await update(form);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: any) {
+      alert("Failed to update PINs in cloud: " + (err.message || 'Unknown error'));
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -461,9 +477,16 @@ function SecurityTab() {
         <div className="pt-4">
           <button
             type="submit"
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-700 active:scale-95 transition-all shadow-sm"
+            disabled={isUpdating}
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-700 active:scale-95 transition-all shadow-sm disabled:opacity-60"
           >
-            {saved ? <><Check className="w-4 h-4 text-green-400" /> PINs Updated!</> : "Update PINs"}
+            {isUpdating ? (
+              <span>Updating...</span>
+            ) : saved ? (
+              <><Check className="w-4 h-4 text-green-400" /> PINs Updated!</>
+            ) : (
+              "Update PINs"
+            )}
           </button>
         </div>
       </form>

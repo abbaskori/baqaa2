@@ -161,31 +161,47 @@ export const StorageAPI = {
 
   // ── SHOP INFO ──────────────────────────────
   getShopInfo: async (): Promise<ShopInfo> => {
-    const { data } = await supabase.from('shop_info').select('*').eq('id', 'default').single();
-    if (!data) return DEFAULT_SHOP_INFO;
-    return { name: data.name, address: data.address, contact: data.contact, gstin: data.gstin ?? '', logo: data.logo ?? '' };
+    try {
+      const { data, error } = await supabase.from('shop_info').select('*').eq('id', 'default').maybeSingle();
+      if (error || !data) return DEFAULT_SHOP_INFO;
+      return { name: data.name, address: data.address, contact: data.contact, gstin: data.gstin ?? '', logo: data.logo ?? '' };
+    } catch {
+      return DEFAULT_SHOP_INFO;
+    }
   },
 
   setShopInfo: async (info: ShopInfo): Promise<void> => {
-    await supabase.from('shop_info').upsert({ id: 'default', ...info, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from('shop_info').upsert({ id: 'default', ...info, updated_at: new Date().toISOString() });
+    if (error) {
+      console.error('Supabase setShopInfo error:', error);
+      throw error;
+    }
     emitChange();
   },
 
   // ── SECURITY ───────────────────────────────
   getSecuritySettings: async (): Promise<SecuritySettings> => {
-    const { data } = await supabase.from('security_settings').select('*').eq('id', 'default').single();
-    if (!data) return DEFAULT_SECURITY;
-    return { adminPin: data.admin_pin ?? '0000', staffPin: data.staff_pin ?? '1234', managerPin: data.manager_pin ?? '5555' };
+    try {
+      const { data, error } = await supabase.from('security_settings').select('*').eq('id', 'default').maybeSingle();
+      if (error || !data) return DEFAULT_SECURITY;
+      return { adminPin: data.admin_pin ?? '0000', staffPin: data.staff_pin ?? '1234', managerPin: data.manager_pin ?? '5555' };
+    } catch {
+      return DEFAULT_SECURITY;
+    }
   },
 
   setSecuritySettings: async (settings: SecuritySettings): Promise<void> => {
-    await supabase.from('security_settings').upsert({
+    const { error } = await supabase.from('security_settings').upsert({
       id: 'default',
       admin_pin: settings.adminPin,
       staff_pin: settings.staffPin,
       manager_pin: settings.managerPin,
       updated_at: new Date().toISOString(),
     });
+    if (error) {
+      console.error('Supabase setSecuritySettings error:', error);
+      throw error;
+    }
     emitChange();
   },
 

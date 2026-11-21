@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Lock, Delete, ChevronRight, Fingerprint } from "lucide-react";
 import { useSecuritySettings } from "@/hooks/use-data";
+import { StorageAPI } from "@/lib/storage";
 
 interface LoginProps {
   onLogin: (role: 'admin' | 'staff' | 'manager') => void;
@@ -10,9 +11,11 @@ interface LoginProps {
 export default function LoginPage({ onLogin }: LoginProps) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
+  const [checking, setChecking] = useState(false);
   const { data: security } = useSecuritySettings();
 
   const handleKeyPress = (val: string) => {
+    if (checking) return;
     if (pin.length < 4) {
       const newPin = pin + val;
       setPin(newPin);
@@ -22,23 +25,49 @@ export default function LoginPage({ onLogin }: LoginProps) {
     }
   };
 
-  const verifyPin = (inputPin: string) => {
+  const verifyPin = async (inputPin: string) => {
+    // 1. Check against current in-memory security settings
     if (inputPin === security.adminPin) {
       onLogin('admin');
+      return;
     } else if (inputPin === security.staffPin) {
       onLogin('staff');
+      return;
     } else if (inputPin === security.managerPin) {
       onLogin('manager');
-    } else {
-      setError(true);
-      setTimeout(() => {
-        setPin("");
-        setError(false);
-      }, 1000);
+      return;
     }
+
+    // 2. Fallback: check live cloud security settings in case cache was still loading or just updated
+    setChecking(true);
+    try {
+      const fresh = await StorageAPI.getSecuritySettings();
+      if (inputPin === fresh.adminPin) {
+        onLogin('admin');
+        return;
+      } else if (inputPin === fresh.staffPin) {
+        onLogin('staff');
+        return;
+      } else if (inputPin === fresh.managerPin) {
+        onLogin('manager');
+        return;
+      }
+    } catch (e) {
+      console.warn('Live PIN check error:', e);
+    } finally {
+      setChecking(false);
+    }
+
+    // 3. Incorrect PIN
+    setError(true);
+    setTimeout(() => {
+      setPin("");
+      setError(false);
+    }, 1000);
   };
 
   const handleDelete = () => {
+    if (checking) return;
     setPin(pin.slice(0, -1));
   };
 
