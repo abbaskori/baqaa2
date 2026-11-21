@@ -64,9 +64,9 @@ function ShopInfoTab() {
   const [syncResult, setSyncResult] = useState<{ orders: number; customers: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    update(form);
+    await update(form);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -383,13 +383,13 @@ function SecurityTab() {
   const [showPins, setShowPins] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.adminPin.length !== 4 || form.staffPin.length !== 4) {
       alert("PINs must be exactly 4 digits.");
       return;
     }
-    update(form);
+    await update(form);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };

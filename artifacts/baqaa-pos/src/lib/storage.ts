@@ -1,29 +1,14 @@
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from './supabase';
 
-const DATA_VERSION = "1.0.0";
-const KEYS = {
-  VERSION: "baqaa_data_version",
-  SHOP_INFO: "baqaa_shop_info",
-  CATEGORIES: "baqaa_categories",
-  MENU_ITEMS: "baqaa_menu_items",
-  ORDERS: "baqaa_orders",
-  CUSTOMERS: "baqaa_customers",
-  BILL_COUNTER: "baqaa_bill_counter",
-  SECURITY: "baqaa_security_settings",
-};
-
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
 export interface SecuritySettings {
   adminPin: string;
   staffPin: string;
   managerPin: string;
 }
-
-const DEFAULT_SECURITY: SecuritySettings = {
-  adminPin: "0000",
-  staffPin: "1234",
-  managerPin: "5555",
-};
 
 export interface ShopInfo {
   name: string;
@@ -44,7 +29,7 @@ export interface MenuItem {
   name: string;
   price: number;
   categoryId: string;
-  image: string; // Emoji
+  image: string;
   createdAt: string;
 }
 
@@ -79,359 +64,279 @@ export interface Customer {
   lastOrderDate: string;
 }
 
+// ─────────────────────────────────────────────
+// Defaults
+// ─────────────────────────────────────────────
 const DEFAULT_SHOP_INFO: ShopInfo = {
-  name: "Baqaa Fast Food",
-  address: "Shop no 15, Seventh Heaven Building, 100 feet Rd, Opp. Al Burooj, Makarba Rd, Juhapura, Ahmedabad, Gujarat-380055",
-  contact: "9099881421",
-  gstin: "",
-  logo: "",
+  name: 'Baqaa Fast Food',
+  address: 'Shop no 15, Seventh Heaven Building, 100 feet Rd, Opp. Al Burooj, Makarba Rd, Juhapura, Ahmedabad, Gujarat-380055',
+  contact: '9099881421',
+  gstin: '',
+  logo: '',
 };
 
-const SEED_DATA = [
-  { cat: "Starters", emoji: "🍿", items: [ {n: "Popcorn", p: 90}, {n: "Peri Peri Popcorn", p: 110}, {n: "Chicken Kurkure", p: 260}, {n: "Chicken Wings", p: 250}, {n: "Chicken Cheese Popcorn", p: 240} ] },
-  { cat: "Burger", emoji: "🍔", items: [ {n: "Chicken Burger", p: 120}, {n: "Safari Burger", p: 130}, {n: "Mexican Burger", p: 130}, {n: "Chili Cheese Burger", p: 150}, {n: "Baqaa Supreme Burger", p: 240}, {n: "Trinity Burger", p: 220} ] },
-  { cat: "Fries", emoji: "🍟", items: [ {n: "Salted Fries", p: 80}, {n: "Peri Peri Fries", p: 100}, {n: "Cheese Fries", p: 130}, {n: "Peri Peri Cheese Fries", p: 160}, {n: "Chicken & Cheese Fries", p: 220} ] },
-  { cat: "Wraps", emoji: "🌯", items: [ {n: "Crunchy Chicken Wrap", p: 180}, {n: "Mexican Chicken Wrap", p: 180}, {n: "Delight Chicken Wrap", p: 200}, {n: "Greek Chicken Wrap", p: 190}, {n: "Schezwan Wrap", p: 200} ] },
-  { cat: "Sizzlers", emoji: "🥘", items: [ {n: "Chicken Hot Finger", p: 340}, {n: "Chicken Cheese Garlic", p: 400}, {n: "Korean Chicken", p: 360}, {n: "Dynamite Chicken", p: 420}, {n: "Hawaii Chicken", p: 400} ] },
-  { cat: "Beverages", emoji: "🍹", items: [ {n: "Virgin Mojito", p: 100}, {n: "Blue Curacao", p: 120}, {n: "Green Apple", p: 120}, {n: "Strawberry Shake", p: 140}, {n: "Nutella Chocolate", p: 190}, {n: "Irish Cold Coffee", p: 150} ] },
-  { cat: "Veg Pizza", emoji: "🍕", items: [ {n: "Mexican 8\"", p: 250}, {n: "Mexican 10\"", p: 320}, {n: "BBQ 8\"", p: 250}, {n: "Supreme 8\"", p: 280}, {n: "Just Cheese 8\"", p: 230}, {n: "Italian 8\"", p: 250} ] },
-  { cat: "Non Veg Pizza", emoji: "🍕", items: [ {n: "Mexican 8\"", p: 290}, {n: "Mexican 10\"", p: 370}, {n: "BBQ 8\"", p: 290}, {n: "Supreme 8\"", p: 320}, {n: "Just Cheese 8\"", p: 270}, {n: "Italian 8\"", p: 290} ] },
-  { cat: "Veg Sandwich", emoji: "🥪", items: [ {n: "Rock & Roll", p: 180}, {n: "Thalaiva", p: 160}, {n: "Firangi", p: 150}, {n: "Zingat", p: 180} ] },
-  { cat: "Non Veg Sandwich", emoji: "🥪", items: [ {n: "Rock & Roll", p: 230}, {n: "Thalaiva", p: 210}, {n: "Firangi", p: 200}, {n: "Zingat", p: 230} ] },
-  { cat: "Combos", emoji: "🍱", items: [ {n: "Kids Combo", p: 170}, {n: "Value Pack", p: 750}, {n: "Budget", p: 310}, {n: "Basic", p: 290}, {n: "Party Pack", p: 990}, {n: "5 in 1 Meal", p: 460}, {n: "Family Pack", p: 2100} ] },
-  { cat: "Add Ons", emoji: "🧀", items: [ {n: "Cheese Dip", p: 30}, {n: "Mayo Dip", p: 15}, {n: "Jalapeno Dip", p: 30}, {n: "Cheese Burst 8\"", p: 100}, {n: "Cheese Burst 10\"", p: 130} ] },
-];
+const DEFAULT_SECURITY: SecuritySettings = {
+  adminPin: '0000',
+  staffPin: '1234',
+  managerPin: '5555',
+};
 
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 export const emitChange = () => window.dispatchEvent(new Event('baqaa_storage_update'));
 
-export function initializeStorage() {
-  const version = localStorage.getItem(KEYS.VERSION);
-  if (version !== DATA_VERSION) {
-    localStorage.clear();
-    
-    localStorage.setItem(KEYS.VERSION, DATA_VERSION);
-    localStorage.setItem(KEYS.SHOP_INFO, JSON.stringify(DEFAULT_SHOP_INFO));
-    localStorage.setItem(KEYS.BILL_COUNTER, "1001");
-    localStorage.setItem(KEYS.ORDERS, JSON.stringify([]));
-    localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify([]));
+/** Map a Supabase DB row → app Category */
+function dbToCat(r: any): Category {
+  return { id: r.id, name: r.name, createdAt: r.created_at };
+}
 
-    const categories: Category[] = [];
-    const menuItems: MenuItem[] = [];
+/** Map a Supabase DB row → app MenuItem */
+function dbToItem(r: any): MenuItem {
+  return { id: r.id, name: r.name, price: Number(r.price), categoryId: r.category_id, image: r.image || '🍔', createdAt: r.created_at };
+}
 
-    SEED_DATA.forEach(c => {
-      const catId = uuidv4();
-      categories.push({ id: catId, name: c.cat, createdAt: new Date().toISOString() });
-      c.items.forEach(i => {
-        menuItems.push({
-          id: uuidv4(),
-          name: i.n,
-          price: i.p,
-          categoryId: catId,
-          image: c.emoji,
-          createdAt: new Date().toISOString()
-        });
-      });
-    });
+/** Map a Supabase DB row → app Order */
+function dbToOrder(r: any): Order {
+  let items: OrderItem[] = [];
+  if (Array.isArray(r.items)) items = r.items;
+  else if (typeof r.items === 'string') { try { items = JSON.parse(r.items); } catch { items = []; } }
+  return {
+    id: r.id,
+    billNumber: Number(r.bill_number ?? 0),
+    items,
+    subtotal: Number(r.subtotal ?? 0),
+    discountType: (r.discount_type ?? 'none') as Order['discountType'],
+    discountValue: Number(r.discount_value ?? 0),
+    discountAmount: Number(r.discount_amount ?? 0),
+    total: Number(r.total ?? 0),
+    paymentMethod: (r.payment_method ?? 'Cash') as Order['paymentMethod'],
+    customerName: String(r.customer_name ?? ''),
+    customerPhone: String(r.customer_phone ?? ''),
+    createdAt: String(r.created_at ?? new Date().toISOString()),
+  };
+}
 
-    localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
-    localStorage.setItem(KEYS.MENU_ITEMS, JSON.stringify(menuItems));
-    emitChange();
+/** Map a Supabase DB row → app Customer */
+function dbToCustomer(r: any): Customer {
+  return { id: r.id, name: r.name, phone: r.phone ?? '', createdAt: r.created_at, lastOrderDate: r.last_order_date ?? r.created_at };
+}
+
+// ─────────────────────────────────────────────
+// Bill counter — only thing kept in localStorage
+// (single source of truth is Supabase; this is
+//  just a local increment buffer synced on load)
+// ─────────────────────────────────────────────
+const BILL_KEY = 'baqaa_bill_counter';
+
+function getLocalBill(): number {
+  return parseInt(localStorage.getItem(BILL_KEY) || '1001', 10);
+}
+
+function setLocalBill(n: number) {
+  localStorage.setItem(BILL_KEY, String(n));
+}
+
+// ─────────────────────────────────────────────
+// initializeStorage — called once on app start
+// ─────────────────────────────────────────────
+export async function initializeStorage() {
+  // Sync bill counter from cloud
+  const { data: latest } = await supabase
+    .from('orders')
+    .select('bill_number')
+    .order('bill_number', { ascending: false })
+    .limit(1);
+  if (latest && latest.length > 0) {
+    const max = Number(latest[0].bill_number);
+    if (max >= getLocalBill()) setLocalBill(max + 1);
   }
-  
-  StorageAPI.listenForWebhooks();
-}
-
-function get<T>(key: string, defaultValue: T): T {
-  const data = localStorage.getItem(key);
-  return data ? JSON.parse(data) : defaultValue;
-}
-
-function set<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
   emitChange();
 }
 
+// ─────────────────────────────────────────────
+// StorageAPI — all data ops go to Supabase
+// ─────────────────────────────────────────────
 export const StorageAPI = {
-  getShopInfo: () => get<ShopInfo>(KEYS.SHOP_INFO, DEFAULT_SHOP_INFO),
-  setShopInfo: (info: ShopInfo) => set(KEYS.SHOP_INFO, info),
 
-  getSecuritySettings: () => get<SecuritySettings>(KEYS.SECURITY, DEFAULT_SECURITY),
-  setSecuritySettings: (settings: SecuritySettings) => {
-    set(KEYS.SECURITY, settings);
+  // ── SHOP INFO ──────────────────────────────
+  getShopInfo: async (): Promise<ShopInfo> => {
+    const { data } = await supabase.from('shop_info').select('*').eq('id', 'default').single();
+    if (!data) return DEFAULT_SHOP_INFO;
+    return { name: data.name, address: data.address, contact: data.contact, gstin: data.gstin ?? '', logo: data.logo ?? '' };
   },
 
-  getCategories: () => get<Category[]>(KEYS.CATEGORIES, []),
-  setCategories: (cats: Category[]) => {
-    set(KEYS.CATEGORIES, cats);
-  },
-  
-  getMenuItems: () => get<MenuItem[]>(KEYS.MENU_ITEMS, []),
-  setMenuItems: (items: MenuItem[]) => {
-    set(KEYS.MENU_ITEMS, items);
+  setShopInfo: async (info: ShopInfo): Promise<void> => {
+    await supabase.from('shop_info').upsert({ id: 'default', ...info, updated_at: new Date().toISOString() });
+    emitChange();
   },
 
-  getOrders: () => get<Order[]>(KEYS.ORDERS, []),
-  addOrder: (orderWithoutIdAndBill: Omit<Order, 'id' | 'billNumber'>) => {
-    const orders = StorageAPI.getOrders();
-    const currentBillStr = localStorage.getItem(KEYS.BILL_COUNTER) || "1001";
-    const currentBill = parseInt(currentBillStr, 10);
-    
-    const newOrder: Order = {
-      ...orderWithoutIdAndBill,
-      id: uuidv4(),
-      billNumber: currentBill
-    };
-    
-    orders.unshift(newOrder); // Add to top
-    set(KEYS.ORDERS, orders);
-    localStorage.setItem(KEYS.BILL_COUNTER, (currentBill + 1).toString());
-
-    // Cloud Sync
-    supabase.from('orders').upsert({
-      id: newOrder.id,
-      bill_number: newOrder.billNumber,
-      items: newOrder.items,
-      subtotal: newOrder.subtotal,
-      discount_type: newOrder.discountType,
-      discount_value: newOrder.discountValue,
-      discount_amount: newOrder.discountAmount,
-      total: newOrder.total,
-      payment_method: newOrder.paymentMethod,
-      customer_name: newOrder.customerName,
-      customer_phone: newOrder.customerPhone,
-      created_at: newOrder.createdAt
-    }).then();
-
-    // Update customer
-    if (newOrder.customerName) {
-      const customers = StorageAPI.getCustomers();
-      const existing = customers.find(c => c.phone === newOrder.customerPhone && newOrder.customerPhone !== "") || 
-                       customers.find(c => c.name.toLowerCase() === newOrder.customerName.toLowerCase());
-      
-      let customer;
-      if (existing) {
-        existing.lastOrderDate = newOrder.createdAt;
-        if (newOrder.customerPhone) existing.phone = newOrder.customerPhone;
-        customer = existing;
-        set(KEYS.CUSTOMERS, customers);
-      } else {
-        customer = {
-          id: uuidv4(),
-          name: newOrder.customerName,
-          phone: newOrder.customerPhone,
-          createdAt: newOrder.createdAt,
-          lastOrderDate: newOrder.createdAt
-        };
-        customers.push(customer);
-        set(KEYS.CUSTOMERS, customers);
-      }
-    }
-
-    return newOrder;
+  // ── SECURITY ───────────────────────────────
+  getSecuritySettings: async (): Promise<SecuritySettings> => {
+    const { data } = await supabase.from('security_settings').select('*').eq('id', 'default').single();
+    if (!data) return DEFAULT_SECURITY;
+    return { adminPin: data.admin_pin ?? '0000', staffPin: data.staff_pin ?? '1234', managerPin: data.manager_pin ?? '5555' };
   },
 
-  updateOrder: (id: string, updates: Omit<Order, 'id' | 'billNumber'>) => {
-    const orders = StorageAPI.getOrders();
-    const index = orders.findIndex(o => o.id === id);
-    if (index === -1) return null;
-
-    const updatedOrder: Order = {
-      ...orders[index],
-      ...updates,
-      id,
-    };
-
-    orders[index] = updatedOrder;
-    set(KEYS.ORDERS, orders);
-
-    // Cloud Sync
-    supabase.from('orders').upsert({
-      id: updatedOrder.id,
-      bill_number: updatedOrder.billNumber,
-      items: updatedOrder.items,
-      subtotal: updatedOrder.subtotal,
-      discount_type: updatedOrder.discountType,
-      discount_value: updatedOrder.discountValue,
-      discount_amount: updatedOrder.discountAmount,
-      total: updatedOrder.total,
-      payment_method: updatedOrder.paymentMethod,
-      customer_name: updatedOrder.customerName,
-      customer_phone: updatedOrder.customerPhone,
-      created_at: updatedOrder.createdAt
-    }).then();
-
-    return updatedOrder;
+  setSecuritySettings: async (settings: SecuritySettings): Promise<void> => {
+    await supabase.from('security_settings').upsert({
+      id: 'default',
+      admin_pin: settings.adminPin,
+      staff_pin: settings.staffPin,
+      manager_pin: settings.managerPin,
+      updated_at: new Date().toISOString(),
+    });
+    emitChange();
   },
 
-  deleteOrder: async (id: string) => {
-    const orders = StorageAPI.getOrders();
-    const filtered = orders.filter(o => o.id !== id);
-    set(KEYS.ORDERS, filtered);
-    // Cloud sync delete
-    await supabase.from('orders').delete().eq('id', id);
+  // ── CATEGORIES ─────────────────────────────
+  getCategories: async (): Promise<Category[]> => {
+    const { data } = await supabase.from('categories').select('*').order('created_at', { ascending: true });
+    return (data || []).map(dbToCat);
   },
 
-  getCustomers: () => get<Customer[]>(KEYS.CUSTOMERS, []),
+  addCategory: async (name: string): Promise<Category> => {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const { data, error } = await supabase.from('categories').insert({ id, name, created_at: now }).select().single();
+    if (error) throw error;
+    emitChange();
+    return dbToCat(data);
+  },
 
-  // Fetch data from cloud on app start: catalog, customers, latest bill counter, and recent 50 orders for offline cache
-  fetchCloudData: async () => {
-    // Keep a lightweight cache of the most recent 50 orders for offline POS billing
-    const { data: recentOrders } = await supabase
+  deleteCategory: async (id: string): Promise<void> => {
+    await supabase.from('categories').delete().eq('id', id);
+    emitChange();
+  },
+
+  // ── MENU ITEMS ─────────────────────────────
+  getMenuItems: async (): Promise<MenuItem[]> => {
+    const { data } = await supabase.from('menu_items').select('*').order('created_at', { ascending: true });
+    return (data || []).map(dbToItem);
+  },
+
+  addMenuItem: async (item: Omit<MenuItem, 'id' | 'createdAt'>): Promise<MenuItem> => {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const { data, error } = await supabase.from('menu_items').insert({
+      id, name: item.name, price: item.price,
+      category_id: item.categoryId, image: item.image, created_at: now,
+    }).select().single();
+    if (error) throw error;
+    emitChange();
+    return dbToItem(data);
+  },
+
+  updateMenuItem: async (id: string, updates: Partial<MenuItem>): Promise<void> => {
+    const payload: any = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.price !== undefined) payload.price = updates.price;
+    if (updates.categoryId !== undefined) payload.category_id = updates.categoryId;
+    if (updates.image !== undefined) payload.image = updates.image;
+    await supabase.from('menu_items').update(payload).eq('id', id);
+    emitChange();
+  },
+
+  deleteMenuItem: async (id: string): Promise<void> => {
+    await supabase.from('menu_items').delete().eq('id', id);
+    emitChange();
+  },
+
+  // ── ORDERS ─────────────────────────────────
+  getOrders: async (limit = 50): Promise<Order[]> => {
+    const { data } = await supabase
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(limit);
+    return (data || []).map(dbToOrder);
+  },
 
-    // Sync bill counter to be at least max(bill_number) + 1
-    const { data: latestBill } = await supabase
-      .from('orders')
-      .select('bill_number')
-      .order('bill_number', { ascending: false })
-      .limit(1);
+  addOrder: async (orderData: Omit<Order, 'id' | 'billNumber'>): Promise<Order> => {
+    const id = uuidv4();
+    const billNumber = getLocalBill();
+    setLocalBill(billNumber + 1);
 
-    if (latestBill && latestBill.length > 0 && latestBill[0].bill_number) {
-      const maxBill = latestBill[0].bill_number;
-      const currentBill = parseInt(localStorage.getItem(KEYS.BILL_COUNTER) || '1001', 10);
-      if (maxBill >= currentBill) {
-        localStorage.setItem(KEYS.BILL_COUNTER, (maxBill + 1).toString());
-      }
+    const row = {
+      id,
+      bill_number: billNumber,
+      items: orderData.items,
+      subtotal: orderData.subtotal,
+      discount_type: orderData.discountType,
+      discount_value: orderData.discountValue,
+      discount_amount: orderData.discountAmount,
+      total: orderData.total,
+      payment_method: orderData.paymentMethod,
+      customer_name: orderData.customerName,
+      customer_phone: orderData.customerPhone,
+      created_at: orderData.createdAt || new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase.from('orders').insert(row).select().single();
+    if (error) throw error;
+
+    // Upsert customer if phone/name provided
+    if (orderData.customerPhone || orderData.customerName) {
+      const custId = orderData.customerPhone
+        ? `cust_${orderData.customerPhone}`
+        : `cust_name_${orderData.customerName.replace(/\s+/g, '_').toLowerCase()}`;
+      await supabase.from('customers').upsert({
+        id: custId,
+        name: orderData.customerName,
+        phone: orderData.customerPhone,
+        created_at: row.created_at,
+        last_order_date: row.created_at,
+      }, { onConflict: 'id' });
     }
 
-    const { data: cats } = await supabase.from('categories').select('*');
-    const { data: items } = await supabase.from('menu_items').select('*');
-    const { data: customers } = await supabase.from('customers').select('*');
+    emitChange();
+    return dbToOrder(data);
+  },
 
-    if (recentOrders) {
-      localStorage.setItem(KEYS.ORDERS, JSON.stringify(recentOrders.map(o => ({
-        ...o,
-        billNumber: o.bill_number,
-        discountType: o.discount_type,
-        discountValue: o.discount_value,
-        discountAmount: o.discount_amount,
-        paymentMethod: o.payment_method,
-        customerName: o.customer_name,
-        customerPhone: o.customer_phone,
-        createdAt: o.created_at
-      }))));
-    }
+  updateOrder: async (id: string, updates: Omit<Order, 'id' | 'billNumber'>): Promise<Order | null> => {
+    const { data, error } = await supabase.from('orders').update({
+      items: updates.items,
+      subtotal: updates.subtotal,
+      discount_type: updates.discountType,
+      discount_value: updates.discountValue,
+      discount_amount: updates.discountAmount,
+      total: updates.total,
+      payment_method: updates.paymentMethod,
+      customer_name: updates.customerName,
+      customer_phone: updates.customerPhone,
+    }).eq('id', id).select().single();
+    if (error) return null;
+    emitChange();
+    return dbToOrder(data);
+  },
 
-    if (cats) localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(cats.map(c => ({
-      id: c.id, name: c.name, createdAt: c.created_at
-    }))));
-
-    if (items) localStorage.setItem(KEYS.MENU_ITEMS, JSON.stringify(items.map(i => ({
-      id: i.id, name: i.name, price: i.price,
-      categoryId: i.category_id, image: i.image, createdAt: i.created_at
-    }))));
-
-    if (customers) localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers.map(c => ({
-      id: c.id, name: c.name, phone: c.phone,
-      createdAt: c.created_at, lastOrderDate: c.last_order_date
-    }))));
-
+  deleteOrder: async (id: string): Promise<void> => {
+    await supabase.from('orders').delete().eq('id', id);
     emitChange();
   },
 
-  // One-time migration: push all localStorage orders & customers up to Supabase
-  syncLocalToCloud: async (): Promise<{ orders: number; customers: number; errors: string[] }> => {
-    const orders = StorageAPI.getOrders();
-    const customers = StorageAPI.getCustomers();
-    const errors: string[] = [];
-    let syncedOrders = 0;
-    let syncedCustomers = 0;
-
-    // Upsert orders in batches of 50
-    for (let i = 0; i < orders.length; i += 50) {
-      const batch = orders.slice(i, i + 50).map(o => ({
-        id: o.id,
-        bill_number: o.billNumber,
-        items: o.items,
-        subtotal: o.subtotal,
-        discount_type: o.discountType,
-        discount_value: o.discountValue,
-        discount_amount: o.discountAmount,
-        total: o.total,
-        payment_method: o.paymentMethod,
-        customer_name: o.customerName,
-        customer_phone: o.customerPhone,
-        created_at: o.createdAt
-      }));
-      const { error } = await supabase.from('orders').upsert(batch);
-      if (error) errors.push(`Orders batch ${i}: ${error.message}`);
-      else syncedOrders += batch.length;
-    }
-
-    // Upsert customers
-    for (let i = 0; i < customers.length; i += 50) {
-      const batch = customers.slice(i, i + 50).map(c => ({
-        id: c.id,
-        name: c.name,
-        phone: c.phone,
-        created_at: c.createdAt,
-        last_order_date: c.lastOrderDate
-      }));
-      const { error } = await supabase.from('customers').upsert(batch);
-      if (error) errors.push(`Customers batch ${i}: ${error.message}`);
-      else syncedCustomers += batch.length;
-    }
-
-    return { orders: syncedOrders, customers: syncedCustomers, errors };
-  },
-  
-  resetData: () => {
-    localStorage.setItem(KEYS.ORDERS, "[]");
-    localStorage.setItem(KEYS.CUSTOMERS, "[]");
-    localStorage.setItem(KEYS.BILL_COUNTER, "1001");
-    emitChange();
+  // ── CUSTOMERS ──────────────────────────────
+  getCustomers: async (): Promise<Customer[]> => {
+    const { data } = await supabase.from('customers').select('*').order('last_order_date', { ascending: false });
+    return (data || []).map(dbToCustomer);
   },
 
-  resetCloudData: async () => {
+  // ── RESET (admin) ──────────────────────────
+  resetData: async (): Promise<void> => {
     await supabase.from('orders').delete().neq('id', 'none');
     await supabase.from('customers').delete().neq('id', 'none');
-    StorageAPI.resetData();
+    setLocalBill(1001);
+    emitChange();
   },
 
-  listenForWebhooks: () => {
-    try {
-      const eventSource = new EventSource('http://localhost:3000/api/webhooks/stream');
-      
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'new_order' && data.order) {
-            console.log('Received new webhook order:', data.order);
-            const newOrder = data.order;
-            const orders = StorageAPI.getOrders();
-            const currentBillStr = localStorage.getItem(KEYS.BILL_COUNTER) || "1001";
-            const currentBill = parseInt(currentBillStr, 10);
-            
-            const savedOrder = {
-              ...newOrder,
-              billNumber: currentBill
-            };
-            
-            orders.unshift(savedOrder);
-            set(KEYS.ORDERS, orders);
-            localStorage.setItem(KEYS.BILL_COUNTER, (currentBill + 1).toString());
-            
-            // Dispatch a specific event to play sound or notify UI if needed
-            window.dispatchEvent(new CustomEvent('baqaa_new_web_order', { detail: savedOrder }));
-            emitChange();
-          }
-        } catch(e) {
-          console.error("Failed to parse SSE", e);
-        }
-      };
-
-      eventSource.onerror = (error) => {
-        console.error("SSE Error:", error);
-        eventSource.close();
-      };
-      
-      return () => eventSource.close();
-    } catch (e) {
-      console.error("SSE Setup failed", e);
-      return () => {};
-    }
-  }
+  // ── Legacy sync shims (no-ops, kept for compat) ──
+  resetCloudData: async (): Promise<void> => {
+    await supabase.from('orders').delete().neq('id', 'none');
+    await supabase.from('customers').delete().neq('id', 'none');
+    setLocalBill(1001);
+    emitChange();
+  },
+  fetchCloudData: async () => { emitChange(); },
+  syncLocalToCloud: async () => ({ orders: 0, customers: 0, errors: [] }),
+  listenForWebhooks: () => () => {},
 };

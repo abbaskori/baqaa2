@@ -236,7 +236,7 @@ export default function POS() {
     return itemName;
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (activeTab.cart.length === 0) return;
     
     const orderData = {
@@ -257,13 +257,17 @@ export default function POS() {
     };
 
     let order;
-    if (activeTab.completedOrder) {
-      order = updateOrder(activeTab.completedOrder.id, orderData);
-    } else {
-      order = createOrder(orderData);
+    try {
+      if (activeTab.completedOrder) {
+        order = await updateOrder(activeTab.completedOrder.id, orderData);
+      } else {
+        order = await createOrder(orderData);
+      }
+      updateTab({ completedOrder: order, viewMode: "receipt", label: activeTab.customerName.trim() || "Guest" });
+    } catch (err) {
+      console.error('Checkout failed:', err);
+      alert('Failed to save order. Please check your internet connection and try again.');
     }
-
-    updateTab({ completedOrder: order, viewMode: "receipt", label: activeTab.customerName.trim() || "Guest" });
   };
 
   const newBill = () => {

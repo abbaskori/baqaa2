@@ -211,63 +211,10 @@ function getDateRangeForFilter(
 }
 
 function paginateLocalOrders(options: OrderFilterOptions): PaginatedOrdersResult {
-  let orders = StorageAPI.getOrders();
-  const timeFilter = options.timeFilter || 'all';
-
-  if (timeFilter !== 'all') {
-    const { start, end } = getDateRangeForFilter(timeFilter, options.selectedDate, options.startDate, options.endDate);
-    if (start && end) {
-      const startMs = new Date(start).getTime();
-      const endMs = new Date(end).getTime();
-      orders = orders.filter(o => {
-        const t = new Date(o.createdAt).getTime();
-        return t >= startMs && t <= endMs;
-      });
-    }
-  }
-
-  if (options.paymentMethod && options.paymentMethod !== 'all') {
-    orders = orders.filter(o => o.paymentMethod === options.paymentMethod);
-  }
-
-  if (options.search && options.search.trim()) {
-    const term = options.search.trim().toLowerCase();
-    orders = orders.filter(o =>
-      String(o.billNumber).includes(term) ||
-      (o.customerName || '').toLowerCase().includes(term) ||
-      (o.customerPhone || '').includes(term)
-    );
-  }
-
-  const sortBy = options.sortBy || 'createdAt';
-  const asc = options.sortOrder === 'asc';
-
-  orders.sort((a, b) => {
-    let cmp = 0;
-    if (sortBy === 'billNumber') cmp = a.billNumber - b.billNumber;
-    else if (sortBy === 'total') cmp = a.total - b.total;
-    else cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-
-    if (cmp === 0) cmp = a.id.localeCompare(b.id);
-    return asc ? cmp : -cmp;
-  });
-
+  // Cloud-first: no local fallback
   const page = Math.max(1, options.page || 1);
   const pageSize = Math.max(1, options.pageSize || 20);
-  const totalCount = orders.length;
-  const totalPages = Math.ceil(totalCount / pageSize) || 1;
-  const from = (page - 1) * pageSize;
-  const paged = orders.slice(from, from + pageSize);
-
-  return {
-    orders: paged,
-    totalCount,
-    page,
-    pageSize,
-    totalPages,
-    hasNextPage: page < totalPages,
-    hasPrevPage: page > 1,
-  };
+  return { orders: [], totalCount: 0, page, pageSize, totalPages: 1, hasNextPage: false, hasPrevPage: false };
 }
 
 async function fetchPaginatedOrders(options: OrderFilterOptions): Promise<PaginatedOrdersResult> {
@@ -524,34 +471,15 @@ async function fetchAnalyticsReport(
       topOrders,
     };
   } catch (err) {
-    console.warn('Analytics summary from Supabase failed, calculating from local orders:', err);
-    const local = StorageAPI.getOrders();
-    const totalOrders = local.length;
-    const totalRevenue = local.reduce((sum, o) => sum + o.total, 0);
+    console.warn('Analytics summary from Supabase failed:', err);
     return {
-      totalOrders,
-      totalRevenue,
-      avgOrderValue: totalOrders ? totalRevenue / totalOrders : 0,
-      uniqueCustomers: new Set(local.map(o => o.customerPhone || o.customerName)).size,
-      repeatCustomers: 0,
-      repeatRate: 0,
-      revenueTrend: 0,
-      ordersTrend: 0,
-      cashRevenue: local.filter(o => o.paymentMethod === 'Cash').reduce((s, o) => s + o.total, 0),
-      onlineRevenue: local.filter(o => o.paymentMethod === 'Online').reduce((s, o) => s + o.total, 0),
-      swiggyRevenue: local.filter(o => o.paymentMethod === 'Swiggy').reduce((s, o) => s + o.total, 0),
-      zomatoRevenue: local.filter(o => o.paymentMethod === 'Zomato').reduce((s, o) => s + o.total, 0),
-      cashOrdersCount: local.filter(o => o.paymentMethod === 'Cash').length,
-      onlineOrdersCount: local.filter(o => o.paymentMethod === 'Online').length,
-      swiggyOrdersCount: local.filter(o => o.paymentMethod === 'Swiggy').length,
-      zomatoOrdersCount: local.filter(o => o.paymentMethod === 'Zomato').length,
-      hourlyData: [],
-      dailyTrendData: [],
-      topItems: [],
-      totalDiscounts: 0,
-      grossRevenue: totalRevenue,
-      discountRate: 0,
-      topOrders: [],
+      totalOrders: 0, totalRevenue: 0, avgOrderValue: 0,
+      uniqueCustomers: 0, repeatCustomers: 0, repeatRate: 0,
+      revenueTrend: 0, ordersTrend: 0,
+      cashRevenue: 0, onlineRevenue: 0, swiggyRevenue: 0, zomatoRevenue: 0,
+      cashOrdersCount: 0, onlineOrdersCount: 0, swiggyOrdersCount: 0, zomatoOrdersCount: 0,
+      hourlyData: [], dailyTrendData: [], topItems: [],
+      totalDiscounts: 0, grossRevenue: 0, discountRate: 0, topOrders: [],
     };
   }
 }
@@ -606,8 +534,8 @@ async function exportFilteredOrdersToCSV(
       offset += CHUNK_SIZE;
     }
   } catch (err) {
-    console.warn('Cloud CSV export failed, exporting local orders:', err);
-    allOrders = StorageAPI.getOrders();
+    console.warn('Cloud CSV export failed:', err);
+    allOrders = [];
   }
 
   const headers = "Bill No,Date,Customer,Phone,Items,Subtotal,Discount,Total,Payment\n";

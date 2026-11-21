@@ -54,8 +54,8 @@ function App() {
   const MASTER_KEY = import.meta.env.VITE_MASTER_KEY;
 
   useEffect(() => {
-    initializeStorage();
-    // Pull latest data from Supabase into localStorage on every app load
+    initializeStorage().catch(console.warn);
+    // fetchCloudData is now a no-op shim; bill counter synced inside initializeStorage
     StorageAPI.fetchCloudData().catch(console.warn);
     
     // ── Secure Device Check ──────────────────────────────────────────────────
