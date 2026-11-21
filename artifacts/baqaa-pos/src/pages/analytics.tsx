@@ -353,11 +353,13 @@ async function fetchAllSummaryRows(start?: string, end?: string): Promise<any[]>
     if (count !== null && count !== undefined) totalCount = count;
 
     const rows = data || [];
+    if (rows.length === 0) break;
     allRows = allRows.concat(rows);
 
-    if (rows.length < CHUNK_SIZE || allRows.length >= totalCount) {
-      break;
-    }
+    // Stop if we got fewer rows than the chunk size (last page)
+    if (rows.length < CHUNK_SIZE) break;
+    // Stop if totalCount is known and we've fetched everything
+    if (totalCount > 0 && allRows.length >= totalCount) break;
     offset += CHUNK_SIZE;
   }
 
@@ -592,15 +594,15 @@ async function exportFilteredOrdersToCSV(
       if (count !== null && count !== undefined) totalCount = count;
 
       const mapped = (data || []).map(mapDbOrderToOrder);
+      if (mapped.length === 0) break;
       allOrders = allOrders.concat(mapped);
 
       if (onProgress) {
         onProgress(allOrders.length, totalCount);
       }
 
-      if (mapped.length < CHUNK_SIZE || allOrders.length >= totalCount) {
-        break;
-      }
+      if (mapped.length < CHUNK_SIZE) break;
+      if (totalCount > 0 && allOrders.length >= totalCount) break;
       offset += CHUNK_SIZE;
     }
   } catch (err) {
