@@ -6,7 +6,8 @@
     "build": "npm run typecheck && npm run build --workspaces --if-present",
     "typecheck:libs": "tsc --build",
     "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present",
-    "vercel-build": "npm run build -w @workspace/baqaa-pos"
+    "vercel-build": "npm run build -w @workspace/baqaa-pos",
+    "test": "node --test artifacts/baqaa-pos/tests/orders-pagination.test.mjs"
   },
   "private": true,
   "workspaces": [

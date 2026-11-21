@@ -273,24 +273,47 @@ export const StorageAPI = {
 
   getCustomers: () => get<Customer[]>(KEYS.CUSTOMERS, []),
 
-  // Fetch all data from cloud (call on app start for new devices)
+  // Fetch data from cloud on app start: catalog, customers, latest bill counter, and recent 50 orders for offline cache
   fetchCloudData: async () => {
-    const { data: orders } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+    // Keep a lightweight cache of the most recent 50 orders for offline POS billing
+    const { data: recentOrders } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    // Sync bill counter to be at least max(bill_number) + 1
+    const { data: latestBill } = await supabase
+      .from('orders')
+      .select('bill_number')
+      .order('bill_number', { ascending: false })
+      .limit(1);
+
+    if (latestBill && latestBill.length > 0 && latestBill[0].bill_number) {
+      const maxBill = latestBill[0].bill_number;
+      const currentBill = parseInt(localStorage.getItem(KEYS.BILL_COUNTER) || '1001', 10);
+      if (maxBill >= currentBill) {
+        localStorage.setItem(KEYS.BILL_COUNTER, (maxBill + 1).toString());
+      }
+    }
+
     const { data: cats } = await supabase.from('categories').select('*');
     const { data: items } = await supabase.from('menu_items').select('*');
     const { data: customers } = await supabase.from('customers').select('*');
 
-    if (orders) localStorage.setItem(KEYS.ORDERS, JSON.stringify(orders.map(o => ({
-      ...o,
-      billNumber: o.bill_number,
-      discountType: o.discount_type,
-      discountValue: o.discount_value,
-      discountAmount: o.discount_amount,
-      paymentMethod: o.payment_method,
-      customerName: o.customer_name,
-      customerPhone: o.customer_phone,
-      createdAt: o.created_at
-    }))));
+    if (recentOrders) {
+      localStorage.setItem(KEYS.ORDERS, JSON.stringify(recentOrders.map(o => ({
+        ...o,
+        billNumber: o.bill_number,
+        discountType: o.discount_type,
+        discountValue: o.discount_value,
+        discountAmount: o.discount_amount,
+        paymentMethod: o.payment_method,
+        customerName: o.customer_name,
+        customerPhone: o.customer_phone,
+        createdAt: o.created_at
+      }))));
+    }
 
     if (cats) localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(cats.map(c => ({
       id: c.id, name: c.name, createdAt: c.created_at
